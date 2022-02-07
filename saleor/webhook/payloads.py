@@ -1001,6 +1001,17 @@ def generate_translation_payload(
     return json.dumps(translation_data)
 
 
+MAX_PAYLOAD_ATTRIBUTE_SIZE = 1024 * 125
+
+
+def truncate_str_to_byte_limit(
+    text: Optional[str], limit=MAX_PAYLOAD_ATTRIBUTE_SIZE, encoding="utf-8"
+) -> Optional[str]:
+    if not text:
+        return text
+    return text.encode(encoding)[:limit].decode(encoding, "ignore")
+
+
 def generate_api_call_payload(request, response):
     content_length = int(request.headers.get("Content-Length", 0))
     response_body = response.content.decode(response.charset)
@@ -1020,12 +1031,12 @@ def generate_api_call_payload(request, response):
         "request_id": request_id or str(uuid.uuid4()),
         "request_time": request.request_time.timestamp(),
         "request_headers": dict(request.headers),
-        "request_body": request_body,
+        "request_body": truncate_str_to_byte_limit(request_body),
         "request_content_length": content_length,
         "response_status_code": response.status_code,
         "response_reason_phrase": response.reason_phrase,
         "response_headers": dict(response.headers),
-        "response_content": response_body,
+        "response_content": truncate_str_to_byte_limit(response_body),
     }
     if hasattr(request, "app") and request.app:
         payload["saleor_app"] = dict(
@@ -1046,7 +1057,7 @@ def generate_event_delivery_attempt_payload(
         "status": attempt.status,
         "request_headers": attempt.request_headers,
         "response_headers": attempt.response_headers,
-        "response_body": attempt.response,
+        "response_body": truncate_str_to_byte_limit(attempt.response),
         "task_params": {"next_retry": None},
     }
     if next_retry:
@@ -1066,5 +1077,5 @@ def generate_event_delivery_attempt_payload(
                 webhook_target_url=webhook.target_url,
             )
         if payload := delivery.payload:
-            data.update(event_payload=payload.payload)
+            data.update(event_payload=truncate_str_to_byte_limit(payload.payload))
     return json.dumps([data])
