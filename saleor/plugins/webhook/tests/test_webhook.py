@@ -917,12 +917,8 @@ def test_event_delivery_retry(mocked_webhook_send, event_delivery, settings):
     mocked_webhook_send.assert_called_once_with(event_delivery.pk)
 
 
-@mock.patch("saleor.plugins.webhook.plugin._get_webhooks_for_event")
-@mock.patch("saleor.plugins.webhook.plugin.trigger_webhooks_async")
-def test_report_api_call(
-    mocked_webhook_trigger, mocked_get_webhooks_for_event, any_webhook, rf, settings
-):
-    mocked_get_webhooks_for_event.return_value = [any_webhook]
+@mock.patch("saleor.plugins.webhook.plugin.trigger_webhooks_for_event.delay")
+def test_report_api_call(mocked_webhook_trigger, rf, settings):
     settings.PLUGINS = ["saleor.plugins.webhook.plugin.WebhookPlugin"]
     manager = get_plugins_manager()
     request = rf.post("/", data={"request": "data"})
@@ -935,12 +931,12 @@ def test_report_api_call(
     manager.report_api_call(request, response)
 
     mocked_webhook_trigger.assert_called_once_with(
-        expected_data, WebhookEventAsyncType.REPORT_API_CALL, [any_webhook]
+        WebhookEventAsyncType.REPORT_API_CALL, expected_data
     )
 
 
 @mock.patch("saleor.plugins.webhook.plugin._get_webhooks_for_event")
-@mock.patch("saleor.plugins.webhook.plugin.trigger_webhooks_async")
+@mock.patch("saleor.plugins.webhook.plugin.trigger_webhooks_for_event.delay")
 def test_report_event_delivery_attempt(
     mocked_webhook_trigger,
     mocked_get_webhooks_for_event,
@@ -957,9 +953,7 @@ def test_report_event_delivery_attempt(
     manager.report_event_delivery_attempt(event_attempt, next_retry)
 
     mocked_webhook_trigger.assert_called_once_with(
-        expected_data,
-        WebhookEventAsyncType.REPORT_EVENT_DELIVERY_ATTEMPT,
-        [any_webhook],
+        WebhookEventAsyncType.REPORT_EVENT_DELIVERY_ATTEMPT, expected_data
     )
 
 
