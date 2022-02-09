@@ -17,11 +17,8 @@ from ..checkout.models import Checkout
 from ..core.models import EventDeliveryAttempt
 from ..core.prices import quantize_price, quantize_price_fields
 from ..core.utils import build_absolute_uri
-from ..core.utils.anonymization import (
-    anonymize_checkout,
-    anonymize_order,
-    generate_fake_user,
-)
+from ..core.utils.anonymization import (anonymize_checkout, anonymize_order,
+                                        generate_fake_user)
 from ..core.utils.json_serializer import CustomJsonEncoder
 from ..order import FulfillmentStatus, OrderStatus
 from ..order.models import Fulfillment, FulfillmentLine, Order, OrderLine
@@ -35,10 +32,8 @@ from ..warehouse.models import Stock, Warehouse
 from . import traced_payload_generator
 from .event_types import WebhookEventAsyncType
 from .payload_serializers import PayloadSerializer
-from .serializers import (
-    serialize_checkout_lines,
-    serialize_product_or_variant_attributes,
-)
+from .serializers import (serialize_checkout_lines,
+                          serialize_product_or_variant_attributes)
 
 if TYPE_CHECKING:
     # pylint: disable=unused-import
@@ -1046,7 +1041,7 @@ def generate_api_call_payload(request, response):
         "response_content": response_body,
         "response_content_truncated": response_body_trunc,
     }
-    if hasattr(request, "app") and request.app:
+    if getattr(request, "app", None):
         payload["saleor_app"] = dict(
             saleor_app_id=graphene.Node.to_global_id("App", request.app.id),
             name=request.app.name,
