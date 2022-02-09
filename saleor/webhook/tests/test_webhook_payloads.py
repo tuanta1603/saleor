@@ -8,6 +8,7 @@ from unittest import mock
 from unittest.mock import ANY
 
 import graphene
+import pytest
 from django.http import JsonResponse
 from django.utils import timezone
 from freezegun import freeze_time
@@ -45,6 +46,7 @@ from ..payloads import (
     generate_requestor,
     generate_sale_payload,
     generate_translation_payload,
+    truncate_str_to_byte_limit,
 )
 
 
@@ -974,11 +976,13 @@ def test_generate_api_call_payload(app, rf):
             "Cookie": "",
         },
         "request_body": '{"request": "data"}',
+        "request_body_truncated": False,
         "request_content_length": 19,
         "response_status_code": 200,
         "response_reason_phrase": "OK",
         "response_headers": {"Content-Type": "application/json"},
         "response_content": '{"response": "data"}',
+        "response_content_truncated": False,
         "saleor_app": {
             "name": "Sample app objects",
             "saleor_app_id": graphene.Node.to_global_id("App", app.pk),
@@ -1042,11 +1046,13 @@ def test_generate_event_delivery_attempt_payload(event_attempt):
         "app_name": "Sample app objects",
         "event_id": graphene.Node.to_global_id("EventDelivery", delivery.pk),
         "event_payload": '{"payload_key": "payload_value"}',
+        "event_payload_truncated": False,
         "event_status": EventDeliveryStatus.PENDING,
         "event_type": WebhookEventAsyncType.ANY,
         "id": graphene.Node.to_global_id("EventDeliveryAttempt", event_attempt.pk),
         "request_headers": None,
         "response_body": "example_response",
+        "response_body_truncated": False,
         "response_headers": None,
         "status": EventDeliveryStatus.PENDING,
         "task_params": {"next_retry": None},
@@ -1064,3 +1070,16 @@ def test_generate_event_delivery_attempt_payload_with_next_retry_date(event_atte
         )
     )[0]
     assert payload["task_params"]["next_retry"] == next_retry_date.timestamp()
+
+
+@pytest.mark.parametrize(
+    "text,limit,expected",
+    [
+        ("abcde", 3, ("abc", True)),
+        (None, 3, (None, False)),
+        ("abó", 3, ("ab", True)),
+        ("abó", 5, ("abó", False)),
+    ],
+)
+def test_truncate_str_to_byte_limit(text, limit, expected):
+    assert truncate_str_to_byte_limit(text, limit) == expected

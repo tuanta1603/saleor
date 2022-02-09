@@ -2,9 +2,10 @@ import json
 import uuid
 from collections import defaultdict
 from dataclasses import asdict
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
 
 import graphene
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
 from django.db.models import F, QuerySet, Sum
 from django.utils import timezone
@@ -1001,21 +1002,20 @@ def generate_translation_payload(
     return json.dumps(translation_data)
 
 
-MAX_PAYLOAD_ATTRIBUTE_SIZE = 1024 * 125
-
-
 def truncate_str_to_byte_limit(
-    text: Optional[str], limit=MAX_PAYLOAD_ATTRIBUTE_SIZE, encoding="utf-8"
-) -> Optional[str]:
-    if not text:
-        return text
-    return text.encode(encoding)[:limit].decode(encoding, "ignore")
+    text: Optional[str], limit: int, encoding="utf-8"
+) -> Tuple[Optional[str], bool]:
+    if (text is None) or (len(encoded := text.encode(encoding)) <= limit):
+        return text, False
+    text = encoded[:limit].decode(encoding, "ignore")
+    return text, True
 
 
 def generate_api_call_payload(request, response):
     content_length = int(request.headers.get("Content-Length", 0))
     response_body = response.content.decode(response.charset)
     request_body = None
+    trunc_limit = settings.REPORTER_MAX_PAYLOAD_SIZE // 2
     if request.POST:
         request_body = json.dumps(dict(request.POST))
     else:
@@ -1023,6 +1023,12 @@ def generate_api_call_payload(request, response):
             request_body = request.body.decode("utf-8")
         except ValueError:
             pass
+    request_body, request_body_trunc = truncate_str_to_byte_limit(
+        request_body, trunc_limit
+    )
+    response_body, response_body_trunc = truncate_str_to_byte_limit(
+        response_body, trunc_limit
+    )
     request_id = None
     if hasattr(request, "request_uuid") and request.request_uuid:
         request_id = str(request.request_uuid)
@@ -1031,12 +1037,14 @@ def generate_api_call_payload(request, response):
         "request_id": request_id or str(uuid.uuid4()),
         "request_time": request.request_time.timestamp(),
         "request_headers": dict(request.headers),
-        "request_body": truncate_str_to_byte_limit(request_body),
+        "request_body": request_body,
+        "request_body_truncated": request_body_trunc,
         "request_content_length": content_length,
         "response_status_code": response.status_code,
         "response_reason_phrase": response.reason_phrase,
         "response_headers": dict(response.headers),
-        "response_content": truncate_str_to_byte_limit(response_body),
+        "response_content": response_body,
+        "response_content_truncated": response_body_trunc,
     }
     if hasattr(request, "app") and request.app:
         payload["saleor_app"] = dict(
@@ -1050,6 +1058,10 @@ def generate_event_delivery_attempt_payload(
     attempt: EventDeliveryAttempt,
     next_retry: Optional["datetime"] = None,
 ):
+    trunc_limit = settings.REPORTER_MAX_PAYLOAD_SIZE // 2
+    response_body, response_body_trunc = truncate_str_to_byte_limit(
+        attempt.response, trunc_limit
+    )
     data = {
         "time": attempt.created_at.timestamp(),
         "id": graphene.Node.to_global_id("EventDeliveryAttempt", attempt.pk),
@@ -1057,7 +1069,8 @@ def generate_event_delivery_attempt_payload(
         "status": attempt.status,
         "request_headers": attempt.request_headers,
         "response_headers": attempt.response_headers,
-        "response_body": truncate_str_to_byte_limit(attempt.response),
+        "response_body": response_body,
+        "response_body_truncated": response_body_trunc,
         "task_params": {"next_retry": None},
     }
     if next_retry:
@@ -1077,5 +1090,11 @@ def generate_event_delivery_attempt_payload(
                 webhook_target_url=webhook.target_url,
             )
         if payload := delivery.payload:
-            data.update(event_payload=truncate_str_to_byte_limit(payload.payload))
+            event_payload, event_payload_truncated = truncate_str_to_byte_limit(
+                payload.payload, trunc_limit
+            )
+            data.update(
+                event_payload=event_payload,
+                event_payload_truncated=event_payload_truncated,
+            )
     return json.dumps([data])
