@@ -318,6 +318,8 @@ class ProductVariant(ChannelContextTypeWithMetadata, ModelObjectType):
         required=False,
         description=f"{ADDED_IN_31} Preorder data for product variant.",
     )
+    created = graphene.DateTime(required=True)
+    updated_at = graphene.DateTime(required=True)
 
     class Meta:
         default_resolver = ChannelContextType.resolver_with_context
@@ -728,7 +730,8 @@ class Product(ChannelContextTypeWithMetadata, ModelObjectType):
     product_type = graphene.Field(lambda: ProductType, required=True)
     slug = graphene.String(required=True)
     category = graphene.Field(lambda: Category)
-    updated_at = graphene.DateTime()
+    created = graphene.DateTime(required=True)
+    updated_at = graphene.DateTime(required=True)
     charge_taxes = graphene.Boolean(required=True)
     weight = graphene.Field(Weight)
     default_variant = graphene.Field(ProductVariant)
