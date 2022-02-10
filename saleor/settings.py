@@ -534,6 +534,7 @@ CELERY_BEAT_SCHEDULE = {
 EVENT_PAYLOAD_DELETE_PERIOD = timedelta(
     seconds=parse(os.environ.get("EVENT_PAYLOAD_DELETE_PERIOD", "14 days"))
 )
+REPORTER_ACTIVE = get_bool_from_env("REPORTER_ACTIVE", False)
 REPORTER_LOG_ALL_API_CALLS = get_bool_from_env("REPORTER_LOG_ALL_API_CALLS", False)
 REPORTER_MAX_PAYLOAD_SIZE = int(os.environ.get("REPORTER_MAX_PAYLOAD_SIZE", 1024 * 250))
 

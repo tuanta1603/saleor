@@ -121,10 +121,27 @@ def test_plugins_middleware_requestor_in_plugin_when_no_app_and_user_in_req_is_n
     assert not plugin.requestor
 
 
+def test_api_reporter_middleware_when_deactivated(rf, app, settings):
+    settings.MIDDLEWARE = [
+        "saleor.core.middleware.api_reporter",
+    ]
+    request = rf.post(API_PATH)
+    request.app = app
+    plugins = Mock(return_value=None)
+    request.plugins = plugins
+
+    handler = BaseHandler()
+    handler.load_middleware()
+    handler.get_response(request)
+
+    plugins.report_api_call.assert_not_called()
+
+
 def test_api_reporter_middleware_when_app_makes_graphql_req(rf, app, settings):
     settings.MIDDLEWARE = [
         "saleor.core.middleware.api_reporter",
     ]
+    settings.REPORTER_ACTIVE = True
     request = rf.post(API_PATH)
     request.app = app
     plugins = Mock(return_value=None)
@@ -138,10 +155,11 @@ def test_api_reporter_middleware_when_app_makes_graphql_req(rf, app, settings):
     plugins.report_api_call.assert_called_once_with(request, response)
 
 
-def test_api_reporter_middleware_when_non_app_makes_graphql_req(rf, app, settings):
+def test_api_reporter_middleware_when_non_app_makes_graphql_req(rf, settings):
     settings.MIDDLEWARE = [
         "saleor.core.middleware.api_reporter",
     ]
+    settings.REPORTER_ACTIVE = True
     request = rf.post(API_PATH)
     request.app = None
     plugins = Mock(return_value=None)
