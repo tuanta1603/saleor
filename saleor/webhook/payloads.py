@@ -14,11 +14,15 @@ from .. import __version__
 from ..account.models import User
 from ..attribute.models import AttributeValueTranslation
 from ..checkout.models import Checkout
+from ..core.auth import DEFAULT_AUTH_HEADER, SALEOR_AUTH_HEADER
 from ..core.models import EventDeliveryAttempt
 from ..core.prices import quantize_price, quantize_price_fields
 from ..core.utils import build_absolute_uri
-from ..core.utils.anonymization import (anonymize_checkout, anonymize_order,
-                                        generate_fake_user)
+from ..core.utils.anonymization import (
+    anonymize_checkout,
+    anonymize_order,
+    generate_fake_user,
+)
 from ..core.utils.json_serializer import CustomJsonEncoder
 from ..order import FulfillmentStatus, OrderStatus
 from ..order.models import Fulfillment, FulfillmentLine, Order, OrderLine
@@ -32,8 +36,10 @@ from ..warehouse.models import Stock, Warehouse
 from . import traced_payload_generator
 from .event_types import WebhookEventAsyncType
 from .payload_serializers import PayloadSerializer
-from .serializers import (serialize_checkout_lines,
-                          serialize_product_or_variant_attributes)
+from .serializers import (
+    serialize_checkout_lines,
+    serialize_product_or_variant_attributes,
+)
 
 if TYPE_CHECKING:
     # pylint: disable=unused-import
@@ -93,6 +99,9 @@ ORDER_PRICE_FIELDS = (
     "undiscounted_total_net_amount",
     "undiscounted_total_gross_amount",
 )
+
+SENSITIVE_ENV_KEYS = (SALEOR_AUTH_HEADER, DEFAULT_AUTH_HEADER)
+SENSITIVE_HEADERS = tuple(x.removeprefix("HTTP_") for x in SENSITIVE_ENV_KEYS)
 
 
 def generate_requestor(requestor: Optional["RequestorOrLazyObject"] = None):
@@ -1006,6 +1015,15 @@ def truncate_str_to_byte_limit(
     return text, True
 
 
+def filter_headers(
+    headers: Dict[str, str], sensitive_headers: Tuple[str, ...] = SENSITIVE_HEADERS
+) -> Dict[str, str]:
+    return {
+        key: val if key.upper().replace("-", "_") not in sensitive_headers else "***"
+        for key, val in headers.items()
+    }
+
+
 def generate_api_call_payload(request, response):
     content_length = int(request.headers.get("Content-Length", 0))
     response_body = response.content.decode(response.charset)
@@ -1031,13 +1049,13 @@ def generate_api_call_payload(request, response):
     payload = {
         "request_id": request_id or str(uuid.uuid4()),
         "request_time": request.request_time.timestamp(),
-        "request_headers": dict(request.headers),
+        "request_headers": filter_headers(dict(request.headers)),
         "request_body": request_body,
         "request_body_truncated": request_body_trunc,
         "request_content_length": content_length,
         "response_status_code": response.status_code,
         "response_reason_phrase": response.reason_phrase,
-        "response_headers": dict(response.headers),
+        "response_headers": filter_headers(dict(response.headers)),
         "response_content": response_body,
         "response_content_truncated": response_body_trunc,
     }

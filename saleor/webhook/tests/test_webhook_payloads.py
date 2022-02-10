@@ -30,6 +30,7 @@ from ...webhook.event_types import WebhookEventAsyncType
 from ..payloads import (
     ORDER_FIELDS,
     PRODUCT_VARIANT_FIELDS,
+    filter_headers,
     generate_api_call_payload,
     generate_checkout_payload,
     generate_collection_payload,
@@ -1083,3 +1084,27 @@ def test_generate_event_delivery_attempt_payload_with_next_retry_date(event_atte
 )
 def test_truncate_str_to_byte_limit(text, limit, expected):
     assert truncate_str_to_byte_limit(text, limit) == expected
+
+
+@pytest.mark.parametrize(
+    "headers,sensitive,expected",
+    [
+        (
+            {"header1": "text", "header2": "text"},
+            ("AUTHORIZATION", "AUTHORIZATION_BEARER"),
+            {"header1": "text", "header2": "text"},
+        ),
+        (
+            {"header1": "text", "authorization": "secret"},
+            ("AUTHORIZATION", "AUTHORIZATION_BEARER"),
+            {"header1": "text", "authorization": "***"},
+        ),
+        (
+            {"HEADER1": "text", "authorization-bearer": "secret"},
+            ("AUTHORIZATION", "AUTHORIZATION_BEARER"),
+            {"HEADER1": "text", "authorization-bearer": "***"},
+        ),
+    ],
+)
+def test_filter_headers(headers, sensitive, expected):
+    assert filter_headers(headers, sensitive_headers=sensitive) == expected
