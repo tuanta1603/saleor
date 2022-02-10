@@ -33,12 +33,12 @@ def store_user_address(
 
 def set_user_default_billing_address(user, address):
     user.default_billing_address = address
-    user.save(update_fields=["default_billing_address"])
+    user.save(update_fields=["default_billing_address", "updated_at"])
 
 
 def set_user_default_shipping_address(user, address):
     user.default_shipping_address = address
-    user.save(update_fields=["default_shipping_address"])
+    user.save(update_fields=["default_shipping_address", "updated_at"])
 
 
 def change_user_default_address(
