@@ -8,6 +8,8 @@ All notable, unreleased changes to this project will be documented in this file.
 
 - Do no allow using `id` for updating checkout and order metadata - #8906 by @IKarbowiak
   - Use `token` instead
+- Don't run plugins when calculating checkout's total price for available shipping methods resolution - #9121 by @rafalp
+  - Use either net or gross price depending on store configuration.
 
 ## Other
 
@@ -48,8 +50,6 @@ All notable, unreleased changes to this project will be documented in this file.
 - Change metadata mutations to use token for order and checkout as identifier - #8426 by @IKarbowiak
   - After changes, using the order `id` for changing order metadata is deprecated
 - Add `withChoices` flag for Attribute type - #7733 by @dexon44
-`CheckoutAddPromoCode`, `CheckoutPaymentCreate` will raise a ValidationError when product in the checkout is
-unavailable - #8978 by @IKarbowiak
 - Fix crash when Avalara plugin was used together with Webhooks plugin for shipping methods - #9121 by @rafalp
 
 
