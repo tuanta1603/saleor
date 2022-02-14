@@ -87,11 +87,12 @@ def delete_old_export_files():
 
     paths_to_delete = list(export_files.values_list("content_file", flat=True))
 
+    counter = 0
     for path in paths_to_delete:
-        if path:
+        if path and default_storage.exists(path):
             default_storage.delete(path)
+            counter += 1
 
-    count = export_files.count()
     export_files.delete()
 
-    task_logger.debug("Delete %s export files.", count)
+    task_logger.debug("Delete %s export files.", counter)
