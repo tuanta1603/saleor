@@ -30,6 +30,7 @@ from ...webhook.event_types import WebhookEventAsyncType
 from ..payloads import (
     ORDER_FIELDS,
     PRODUCT_VARIANT_FIELDS,
+    TruncatedJsonText,
     filter_headers,
     generate_api_call_payload,
     generate_checkout_payload,
@@ -47,7 +48,6 @@ from ..payloads import (
     generate_requestor,
     generate_sale_payload,
     generate_translation_payload,
-    truncate_str_to_byte_limit,
 )
 
 
@@ -1004,7 +1004,7 @@ def test_generate_api_call_payload_from_request_with_non_utf8_body(app, rf):
 
     payload = json.loads(generate_api_call_payload(request, response))[0]
 
-    assert payload["request_body"] is None
+    assert payload["request_body"] == ""
 
 
 def test_generate_api_call_payload_from_post_request(app, rf):
@@ -1074,16 +1074,44 @@ def test_generate_event_delivery_attempt_payload_with_next_retry_date(event_atte
 
 
 @pytest.mark.parametrize(
-    "text,limit,expected",
+    "text,limit,size,expected",
     [
-        ("abcde", 3, ("abc", True)),
-        (None, 3, (None, False)),
-        ("abó", 3, ("ab", True)),
-        ("abó", 5, ("abó", False)),
+        ("abcde", 5, 5, {"text": "abcde", "is_truncated": False}),
+        ("abó", 3, 2, {"text": "ab", "is_truncated": True}),
+        ("abó", 8, 8, {"text": "abó", "is_truncated": False}),
+        ("abó", 12, 8, {"text": "abó", "is_truncated": False}),
+        ("a\nc𐀁d", 17, 17, {"text": "a\nc𐀁d", "is_truncated": False}),
+        ("a\nc𐀁d", 10, 4, {"text": "a\nc", "is_truncated": True}),
+        ("a\nc𐀁d", 16, 16, {"text": "a\nc𐀁", "is_truncated": True}),
     ],
 )
-def test_truncate_str_to_byte_limit(text, limit, expected):
-    assert truncate_str_to_byte_limit(text, limit) == expected
+def test_truncated_text_to_byte_limit_ensure_ascii(text, limit, size, expected):
+    truncated = TruncatedJsonText.to_byte_limit(text, limit, ensure_ascii=True)
+    assert asdict(truncated) == expected
+    assert truncated.byte_size == size
+
+
+@pytest.mark.parametrize(
+    "text,limit,size,expected",
+    [
+        ("abcde", 5, 5, {"text": "abcde", "is_truncated": False}),
+        ("abó", 3, 2, {"text": "ab", "is_truncated": True}),
+        ("abó", 8, 4, {"text": "abó", "is_truncated": False}),
+        ("abó", 12, 4, {"text": "abó", "is_truncated": False}),
+        ("a\nc𐀁d", 9, 9, {"text": "a\nc𐀁d", "is_truncated": False}),
+        ("a\nc𐀁d", 7, 4, {"text": "a\nc", "is_truncated": True}),
+        ("a\nc𐀁d", 8, 8, {"text": "a\nc𐀁", "is_truncated": True}),
+        ("a\nc𐀁d", 8, 8, {"text": "a\nc𐀁", "is_truncated": True}),
+        ("ab\x1fc", 8, 8, {"text": "ab\x1f", "is_truncated": True}),
+        ("ab\x1fc", 9, 9, {"text": "ab\x1fc", "is_truncated": False}),
+    ],
+)
+def test_truncated_text_to_byte_limit_ensure_ascii_set_false(
+    text, limit, size, expected
+):
+    truncated = TruncatedJsonText.to_byte_limit(text, limit, ensure_ascii=False)
+    assert asdict(truncated) == expected
+    assert truncated.byte_size == size
 
 
 @pytest.mark.parametrize(
