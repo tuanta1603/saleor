@@ -30,8 +30,8 @@ from ...webhook.event_types import WebhookEventAsyncType
 from ..payloads import (
     ORDER_FIELDS,
     PRODUCT_VARIANT_FIELDS,
-    TruncatedJsonHeaders,
-    TruncatedJsonText,
+    JsonTruncHeaders,
+    JsonTruncText,
     filter_headers,
     generate_api_call_payload,
     generate_checkout_payload,
@@ -1075,75 +1075,75 @@ def test_generate_event_delivery_attempt_payload_with_next_retry_date(event_atte
 
 
 @pytest.mark.parametrize(
-    "text,limit,size,expected",
+    "text,limit,expected_size,expected_text,expected_truncated",
     [
-        ("abcde", 5, 5, {"text": "abcde", "is_truncated": False}),
-        ("abó", 3, 2, {"text": "ab", "is_truncated": True}),
-        ("abó", 8, 8, {"text": "abó", "is_truncated": False}),
-        ("abó", 12, 8, {"text": "abó", "is_truncated": False}),
-        ("a\nc𐀁d", 17, 17, {"text": "a\nc𐀁d", "is_truncated": False}),
-        ("a\nc𐀁d", 10, 4, {"text": "a\nc", "is_truncated": True}),
-        ("a\nc𐀁d", 16, 16, {"text": "a\nc𐀁", "is_truncated": True}),
-        ("abcd", 0, 0, {"text": "", "is_truncated": True}),
+        ("abcde", 5, 5, "abcde", False),
+        ("abó", 3, 2, "ab", True),
+        ("abó", 8, 8, "abó", False),
+        ("abó", 12, 8, "abó", False),
+        ("a\nc𐀁d", 17, 17, "a\nc𐀁d", False),
+        ("a\nc𐀁d", 10, 4, "a\nc", True),
+        ("a\nc𐀁d", 16, 16, "a\nc𐀁", True),
+        ("abcd", 0, 0, "", True),
     ],
 )
-def test_truncated_text_to_byte_limit_ensure_ascii(text, limit, size, expected):
-    truncated = TruncatedJsonText.to_byte_limit(text, limit, ensure_ascii=True)
-    assert asdict(truncated) == expected
-    assert truncated.byte_size == size
+def test_truncated_text_to_byte_limit_ensure_ascii(
+    text, limit, expected_size, expected_text, expected_truncated
+):
+    truncated = JsonTruncText.create(text, limit, ensure_ascii=True)
+    assert truncated.text == expected_text
+    assert truncated.byte_size == expected_size
+    assert truncated.truncated == expected_truncated
 
 
 @pytest.mark.parametrize(
-    "text,limit,size,expected",
+    "text,limit,expected_size,expected_text,expected_truncated",
     [
-        ("abcde", 5, 5, {"text": "abcde", "is_truncated": False}),
-        ("abó", 3, 2, {"text": "ab", "is_truncated": True}),
-        ("abó", 8, 4, {"text": "abó", "is_truncated": False}),
-        ("abó", 12, 4, {"text": "abó", "is_truncated": False}),
-        ("a\nc𐀁d", 9, 9, {"text": "a\nc𐀁d", "is_truncated": False}),
-        ("a\nc𐀁d", 7, 4, {"text": "a\nc", "is_truncated": True}),
-        ("a\nc𐀁d", 8, 8, {"text": "a\nc𐀁", "is_truncated": True}),
-        ("a\nc𐀁d", 8, 8, {"text": "a\nc𐀁", "is_truncated": True}),
-        ("ab\x1fc", 8, 8, {"text": "ab\x1f", "is_truncated": True}),
-        ("ab\x1fc", 9, 9, {"text": "ab\x1fc", "is_truncated": False}),
+        ("abcde", 5, 5, "abcde", False),
+        ("abó", 3, 2, "ab", True),
+        ("abó", 8, 4, "abó", False),
+        ("abó", 12, 4, "abó", False),
+        ("a\nc𐀁d", 9, 9, "a\nc𐀁d", False),
+        ("a\nc𐀁d", 7, 4, "a\nc", True),
+        ("a\nc𐀁d", 8, 8, "a\nc𐀁", True),
+        ("a\nc𐀁d", 8, 8, "a\nc𐀁", True),
+        ("ab\x1fc", 8, 8, "ab\x1f", True),
+        ("ab\x1fc", 9, 9, "ab\x1fc", False),
     ],
 )
 def test_truncated_text_to_byte_limit_ensure_ascii_set_false(
-    text, limit, size, expected
+    text, limit, expected_size, expected_text, expected_truncated
 ):
-    truncated = TruncatedJsonText.to_byte_limit(text, limit, ensure_ascii=False)
-    assert asdict(truncated) == expected
-    assert truncated.byte_size == size
+    truncated = JsonTruncText.create(text, limit, ensure_ascii=False)
+    assert truncated.text == expected_text
+    assert truncated.truncated == expected_truncated
+    assert truncated.byte_size == expected_size
 
 
 def test_truncated_json_headers():
     headers = {"a": "abc", "b": "abc"}
-    truncated = TruncatedJsonHeaders.to_byte_limit(
-        headers, 7, base_markup=0, header_markup=0
-    )
-    assert truncated.headers_striped is False
+    truncated = JsonTruncHeaders.create(headers, 7, base_markup=0, header_markup=0)
+    assert truncated.striped is False
     assert truncated.byte_size == 6
     assert len(truncated.headers) == len(headers)
     assert truncated.headers["a"].text == "ab"
-    assert truncated.headers["a"].is_truncated is True
+    assert truncated.headers["a"].truncated is True
 
 
 def test_truncated_json_headers_whene_headers_striped():
     headers = {"a": "abc", "long-header": "abc"}
-    truncated = TruncatedJsonHeaders.to_byte_limit(
-        headers, 7, base_markup=0, header_markup=0
-    )
-    assert truncated.headers_striped is True
+    truncated = JsonTruncHeaders.create(headers, 7, base_markup=0, header_markup=0)
+    assert truncated.striped is True
     assert truncated.byte_size == 3
     assert len(truncated.headers) == len(headers) - 1
 
 
 def test_truncated_json_headers_with_default_markups():
     headers = {"a": "abc", "b": "abc"}
-    markup = TruncatedJsonHeaders.BASE_MARKUP + TruncatedJsonHeaders.HEADER_MARKUP * 2
+    markup = JsonTruncHeaders.BASE_MARKUP + JsonTruncHeaders.HEADER_MARKUP * 2
     limit = 8 + markup
-    truncated = TruncatedJsonHeaders.to_byte_limit(headers, limit)
-    assert truncated.headers_striped is False
+    truncated = JsonTruncHeaders.create(headers, limit)
+    assert truncated.striped is False
     assert truncated.byte_size == limit
     assert truncated.byte_size >= len(json.dumps(asdict(truncated)))
 

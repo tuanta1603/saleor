@@ -1008,9 +1008,9 @@ def generate_translation_payload(
 
 
 @dataclass
-class TruncatedJsonText:
+class JsonTruncText:
     text: str = ""
-    is_truncated: bool = False
+    truncated: bool = False
     added_bytes: InitVar[int] = 0
     ensure_ascii: InitVar[bool] = True
 
@@ -1032,7 +1032,7 @@ class TruncatedJsonText:
         return len(self.text) + self._added_bytes
 
     @classmethod
-    def to_byte_limit(cls, s: str, limit: int, ensure_ascii=True):
+    def create(cls, s: str, limit: int, ensure_ascii=True):
         limit = limit if limit > 0 else 0
         s_init_len = len(s)
         s = s[:limit]
@@ -1045,7 +1045,7 @@ class TruncatedJsonText:
             if end + added_bytes > limit:
                 return cls(
                     text=s[:start],
-                    is_truncated=True,
+                    truncated=True,
                     added_bytes=added_bytes - markup,
                     ensure_ascii=ensure_ascii,
                 )
@@ -1053,27 +1053,25 @@ class TruncatedJsonText:
                 s = s[:end]
                 return cls(
                     text=s,
-                    is_truncated=len(s) < s_init_len,
+                    truncated=len(s) < s_init_len,
                     added_bytes=added_bytes,
                     ensure_ascii=ensure_ascii,
                 )
         return cls(
             text=s,
-            is_truncated=len(s) < s_init_len,
+            truncated=len(s) < s_init_len,
             added_bytes=added_bytes,
             ensure_ascii=ensure_ascii,
         )
 
 
 @dataclass
-class TruncatedJsonHeaders:
-    BASE_MARKUP: ClassVar[int] = len(
-        json.dumps({"headers": {}, "headers_striped": False})
-    )
-    HEADER_MARKUP: ClassVar[int] = len(json.dumps({"": asdict(TruncatedJsonText())}))
+class JsonTruncHeaders:
+    BASE_MARKUP: ClassVar[int] = len(json.dumps({"headers": {}, "striped": False}))
+    HEADER_MARKUP: ClassVar[int] = len(json.dumps({"": asdict(JsonTruncText())}))
 
-    headers: Dict[str, TruncatedJsonText] = field(default_factory=dict)
-    headers_striped: bool = False
+    headers: Dict[str, JsonTruncText] = field(default_factory=dict)
+    striped: bool = False
     ensure_ascii: InitVar[bool] = True
     base_markup: InitVar[int] = BASE_MARKUP
     header_markup: InitVar[int] = HEADER_MARKUP
@@ -1091,7 +1089,7 @@ class TruncatedJsonHeaders:
         return size
 
     @classmethod
-    def to_byte_limit(
+    def create(
         cls,
         headers: Dict[str, str],
         limit: int,
@@ -1112,10 +1110,10 @@ class TruncatedJsonHeaders:
         )
         for name, value in headers.items():
             if len(name) > header_limit:
-                truncated.headers_striped = True
+                truncated.striped = True
                 continue
             value_limit = header_limit - len(name)
-            truncated.headers[name] = TruncatedJsonText.to_byte_limit(
+            truncated.headers[name] = JsonTruncText.create(
                 value, value_limit, ensure_ascii=ensure_ascii
             )
         return truncated
@@ -1142,8 +1140,8 @@ def generate_api_call_payload(request, response):
             request_body = request.body.decode("utf-8")
         except ValueError:
             pass
-    trunc_req_body = TruncatedJsonText.to_byte_limit(request_body, trunc_limit)
-    trunc_resp_body = TruncatedJsonText.to_byte_limit(response_body, trunc_limit)
+    trunc_req_body = JsonTruncText.create(request_body, trunc_limit)
+    trunc_resp_body = JsonTruncText.create(response_body, trunc_limit)
     request_id = None
     if hasattr(request, "request_uuid") and request.request_uuid:
         request_id = str(request.request_uuid)
@@ -1153,13 +1151,13 @@ def generate_api_call_payload(request, response):
         "request_time": request.request_time.timestamp(),
         "request_headers": filter_headers(dict(request.headers)),
         "request_body": trunc_req_body.text,
-        "request_body_truncated": trunc_req_body.is_truncated,
+        "request_body_truncated": trunc_req_body.truncated,
         "request_content_length": content_length,
         "response_status_code": response.status_code,
         "response_reason_phrase": response.reason_phrase,
         "response_headers": filter_headers(dict(response.headers)),
         "response_content": trunc_resp_body.text,
-        "response_content_truncated": trunc_resp_body.is_truncated,
+        "response_content_truncated": trunc_resp_body.truncated,
     }
     if getattr(request, "app", None):
         payload["saleor_app"] = dict(
@@ -1174,7 +1172,7 @@ def generate_event_delivery_attempt_payload(
     next_retry: Optional["datetime"] = None,
 ):
     trunc_limit = settings.REPORTER_MAX_PAYLOAD_SIZE // 2
-    trunc_resp_body = TruncatedJsonText.to_byte_limit(attempt.response, trunc_limit)
+    trunc_resp_body = JsonTruncText.create(attempt.response, trunc_limit)
     data = {
         "time": attempt.created_at.timestamp(),
         "id": graphene.Node.to_global_id("EventDeliveryAttempt", attempt.pk),
@@ -1183,7 +1181,7 @@ def generate_event_delivery_attempt_payload(
         "request_headers": attempt.request_headers,
         "response_headers": attempt.response_headers,
         "response_body": trunc_resp_body.text,
-        "response_body_truncated": trunc_resp_body.is_truncated,
+        "response_body_truncated": trunc_resp_body.truncated,
         "task_params": {"next_retry": None},
     }
     if next_retry:
@@ -1203,11 +1201,9 @@ def generate_event_delivery_attempt_payload(
                 webhook_target_url=webhook.target_url,
             )
         if payload := delivery.payload:
-            trunc_payload = TruncatedJsonText.to_byte_limit(
-                payload.payload, trunc_limit
-            )
+            trunc_payload = JsonTruncText.create(payload.payload, trunc_limit)
             data.update(
                 event_payload=trunc_payload.text,
-                event_payload_truncated=trunc_payload.is_truncated,
+                event_payload_truncated=trunc_payload.truncated,
             )
     return json.dumps([data])
