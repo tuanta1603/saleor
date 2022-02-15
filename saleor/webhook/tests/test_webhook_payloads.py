@@ -30,6 +30,7 @@ from ...webhook.event_types import WebhookEventAsyncType
 from ..payloads import (
     ORDER_FIELDS,
     PRODUCT_VARIANT_FIELDS,
+    TruncatedJsonHeaders,
     TruncatedJsonText,
     filter_headers,
     generate_api_call_payload,
@@ -1083,6 +1084,7 @@ def test_generate_event_delivery_attempt_payload_with_next_retry_date(event_atte
         ("a\nc𐀁d", 17, 17, {"text": "a\nc𐀁d", "is_truncated": False}),
         ("a\nc𐀁d", 10, 4, {"text": "a\nc", "is_truncated": True}),
         ("a\nc𐀁d", 16, 16, {"text": "a\nc𐀁", "is_truncated": True}),
+        ("abcd", 0, 0, {"text": "", "is_truncated": True}),
     ],
 )
 def test_truncated_text_to_byte_limit_ensure_ascii(text, limit, size, expected):
@@ -1112,6 +1114,38 @@ def test_truncated_text_to_byte_limit_ensure_ascii_set_false(
     truncated = TruncatedJsonText.to_byte_limit(text, limit, ensure_ascii=False)
     assert asdict(truncated) == expected
     assert truncated.byte_size == size
+
+
+def test_truncated_json_headers():
+    headers = {"a": "abc", "b": "abc"}
+    truncated = TruncatedJsonHeaders.to_byte_limit(
+        headers, 7, base_markup=0, header_markup=0
+    )
+    assert truncated.headers_striped is False
+    assert truncated.byte_size == 6
+    assert len(truncated.headers) == len(headers)
+    assert truncated.headers["a"].text == "ab"
+    assert truncated.headers["a"].is_truncated is True
+
+
+def test_truncated_json_headers_whene_headers_striped():
+    headers = {"a": "abc", "long-header": "abc"}
+    truncated = TruncatedJsonHeaders.to_byte_limit(
+        headers, 7, base_markup=0, header_markup=0
+    )
+    assert truncated.headers_striped is True
+    assert truncated.byte_size == 3
+    assert len(truncated.headers) == len(headers) - 1
+
+
+def test_truncated_json_headers_with_default_markups():
+    headers = {"a": "abc", "b": "abc"}
+    markup = TruncatedJsonHeaders.BASE_MARKUP + TruncatedJsonHeaders.HEADER_MARKUP * 2
+    limit = 8 + markup
+    truncated = TruncatedJsonHeaders.to_byte_limit(headers, limit)
+    assert truncated.headers_striped is False
+    assert truncated.byte_size == limit
+    assert truncated.byte_size >= len(json.dumps(asdict(truncated)))
 
 
 @pytest.mark.parametrize(

@@ -1,9 +1,9 @@
 import json
 import uuid
 from collections import defaultdict
-from dataclasses import InitVar, asdict, dataclass
-from json.encoder import ESCAPE_ASCII, ESCAPE_DCT
-from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
+from dataclasses import InitVar, asdict, dataclass, field
+from json.encoder import ESCAPE_ASCII, ESCAPE_DCT, py_encode_basestring_ascii
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, List, Optional, Tuple
 
 import graphene
 from django.conf import settings
@@ -1009,7 +1009,7 @@ def generate_translation_payload(
 
 @dataclass
 class TruncatedJsonText:
-    text: str
+    text: str = ""
     is_truncated: bool = False
     added_bytes: InitVar[int] = 0
     ensure_ascii: InitVar[bool] = True
@@ -1063,6 +1063,62 @@ class TruncatedJsonText:
             added_bytes=added_bytes,
             ensure_ascii=ensure_ascii,
         )
+
+
+@dataclass
+class TruncatedJsonHeaders:
+    BASE_MARKUP: ClassVar[int] = len(
+        json.dumps({"headers": {}, "headers_striped": False})
+    )
+    HEADER_MARKUP: ClassVar[int] = len(json.dumps({"": asdict(TruncatedJsonText())}))
+
+    headers: Dict[str, TruncatedJsonText] = field(default_factory=dict)
+    headers_striped: bool = False
+    ensure_ascii: InitVar[bool] = True
+    base_markup: InitVar[int] = BASE_MARKUP
+    header_markup: InitVar[int] = HEADER_MARKUP
+
+    def __post_init__(self, ensure_ascii, base_markup, header_markup):
+        self._ensure_ascii = ensure_ascii
+        self._base_markup = base_markup
+        self._header_markup = header_markup
+
+    @property
+    def byte_size(self) -> int:
+        size = self._base_markup
+        for name, value in self.headers.items():
+            size += len(name) + value.byte_size + self._header_markup
+        return size
+
+    @classmethod
+    def to_byte_limit(
+        cls,
+        headers: Dict[str, str],
+        limit: int,
+        ensure_ascii=True,
+        base_markup=BASE_MARKUP,
+        header_markup=HEADER_MARKUP,
+    ):
+        if not headers:
+            return cls(base_markup=base_markup, header_markup=header_markup)
+        markup = base_markup + len(headers) * header_markup
+        limit -= markup
+        limit = limit if limit > 0 else 0
+        header_limit = limit // len(headers)
+        truncated = cls(
+            ensure_ascii=ensure_ascii,
+            base_markup=base_markup,
+            header_markup=header_markup,
+        )
+        for name, value in headers.items():
+            if len(name) > header_limit:
+                truncated.headers_striped = True
+                continue
+            value_limit = header_limit - len(name)
+            truncated.headers[name] = TruncatedJsonText.to_byte_limit(
+                value, value_limit, ensure_ascii=ensure_ascii
+            )
+        return truncated
 
 
 def filter_headers(
