@@ -2,7 +2,8 @@ import json
 import uuid
 from collections import defaultdict
 from dataclasses import InitVar, asdict, dataclass, field
-from json.encoder import ESCAPE_ASCII, ESCAPE_DCT, py_encode_basestring_ascii
+from json import JSONDecodeError
+from json.encoder import ESCAPE_ASCII, ESCAPE_DCT
 from typing import TYPE_CHECKING, Any, ClassVar, Dict, Iterable, List, Optional, Tuple
 
 import graphene
@@ -1130,40 +1131,44 @@ def filter_headers(
 
 def generate_api_call_payload(request, response):
     content_length = int(request.headers.get("Content-Length", 0))
-    response_body = response.content.decode(response.charset)
-    request_body = ""
-    trunc_limit = settings.REPORTER_MAX_PAYLOAD_SIZE // 2
+    limit = settings.REPORTER_MAX_PAYLOAD_SIZE
     if request.POST:
-        request_body = json.dumps(dict(request.POST))
+        request_content = json.dumps(dict(request.POST))
     else:
         try:
-            request_body = request.body.decode("utf-8")
+            request_content = request.body.decode("utf-8")
         except ValueError:
-            pass
-    trunc_req_body = JsonTruncText.create(request_body, trunc_limit)
-    trunc_resp_body = JsonTruncText.create(response_body, trunc_limit)
-    request_id = None
-    if hasattr(request, "request_uuid") and request.request_uuid:
-        request_id = str(request.request_uuid)
-
+            request_content = ""
+    request_headers = JsonTruncHeaders.create(
+        filter_headers(dict(request.headers)), limit // 8
+    )
+    response_headers = JsonTruncHeaders.create(
+        filter_headers(dict(response.headers)), limit // 8
+    )
+    request_body = JsonTruncText.create(request_content, limit // 4)
+    limit -= (
+        request_headers.byte_size + response_headers.byte_size + request_body.byte_size
+    )
+    response_body = JsonTruncText.create(
+        response.content.decode(response.charset), limit
+    )
+    request_id = getattr(request, "request_uuid", None)
     payload = {
-        "request_id": request_id or str(uuid.uuid4()),
+        "request_id": str(request_id) if request_id else str(uuid.uuid4()),
         "request_time": request.request_time.timestamp(),
-        "request_headers": filter_headers(dict(request.headers)),
-        "request_body": trunc_req_body.text,
-        "request_body_truncated": trunc_req_body.truncated,
+        "request_headers": asdict(request_headers),
+        "request_body": asdict(request_body),
         "request_content_length": content_length,
         "response_status_code": response.status_code,
         "response_reason_phrase": response.reason_phrase,
-        "response_headers": filter_headers(dict(response.headers)),
-        "response_content": trunc_resp_body.text,
-        "response_content_truncated": trunc_resp_body.truncated,
+        "response_headers": asdict(response_headers),
+        "response_content": asdict(response_body),
     }
     if getattr(request, "app", None):
-        payload["saleor_app"] = dict(
-            saleor_app_id=graphene.Node.to_global_id("App", request.app.id),
-            name=request.app.name,
-        )
+        payload["saleor_app"] = {
+            "saleor_app_id": graphene.Node.to_global_id("App", request.app.id),
+            "name": request.app.name,
+        }
     return json.dumps([payload])
 
 
@@ -1171,21 +1176,36 @@ def generate_event_delivery_attempt_payload(
     attempt: EventDeliveryAttempt,
     next_retry: Optional["datetime"] = None,
 ):
-    trunc_limit = settings.REPORTER_MAX_PAYLOAD_SIZE // 2
-    trunc_resp_body = JsonTruncText.create(attempt.response, trunc_limit)
+    limit = settings.REPORTER_MAX_PAYLOAD_SIZE
+    try:
+        request_headers = JsonTruncHeaders.create(
+            json.loads(attempt.request_headers), limit // 8
+        )
+    except (JSONDecodeError, TypeError):
+        request_headers = JsonTruncHeaders()
+    try:
+        response_headers = JsonTruncHeaders.create(
+            json.loads(attempt.response_headers), limit // 8
+        )
+    except (JSONDecodeError, TypeError):
+        response_headers = JsonTruncHeaders()
+    response_body = JsonTruncText.create(attempt.response or "", limit // 4)
+    limit -= (
+        request_headers.byte_size
+        + response_headers.byte_size
+        + response_headers.byte_size
+    )
+    task_params = {"next_retry": next_retry.timestamp() if next_retry else None}
     data = {
         "time": attempt.created_at.timestamp(),
         "id": graphene.Node.to_global_id("EventDeliveryAttempt", attempt.pk),
         "duration": attempt.duration,
         "status": attempt.status,
-        "request_headers": attempt.request_headers,
-        "response_headers": attempt.response_headers,
-        "response_body": trunc_resp_body.text,
-        "response_body_truncated": trunc_resp_body.truncated,
-        "task_params": {"next_retry": None},
+        "request_headers": asdict(request_headers),
+        "response_headers": asdict(response_headers),
+        "response_body": asdict(response_body),
+        "task_params": task_params,
     }
-    if next_retry:
-        data["task_params"]["next_retry"] = next_retry.timestamp()
     if delivery := attempt.delivery:
         data.update(
             event_id=graphene.Node.to_global_id("EventDelivery", delivery.pk),
@@ -1200,10 +1220,7 @@ def generate_event_delivery_attempt_payload(
                 webhook_name=webhook.name,
                 webhook_target_url=webhook.target_url,
             )
-        if payload := delivery.payload:
-            trunc_payload = JsonTruncText.create(payload.payload, trunc_limit)
-            data.update(
-                event_payload=trunc_payload.text,
-                event_payload_truncated=trunc_payload.truncated,
-            )
+        if delivery.payload:
+            payload = JsonTruncText.create(delivery.payload.payload, limit)
+            data["event_payload"] = asdict(payload)
     return json.dumps([data])

@@ -973,18 +973,24 @@ def test_generate_api_call_payload(app, rf):
     assert payload == {
         "request_time": request.request_time.timestamp(),
         "request_headers": {
-            "Content-Length": "19",
-            "Content-Type": "application/json",
-            "Cookie": "",
+            "headers": {
+                "Content-Length": {"text": "19", "truncated": False},
+                "Content-Type": {"text": "application/json", "truncated": False},
+                "Cookie": {"text": "", "truncated": False},
+            },
+            "striped": False,
         },
-        "request_body": '{"request": "data"}',
-        "request_body_truncated": False,
+        "request_body": {"text": '{"request": "data"}', "truncated": False},
         "request_content_length": 19,
         "response_status_code": 200,
         "response_reason_phrase": "OK",
-        "response_headers": {"Content-Type": "application/json"},
-        "response_content": '{"response": "data"}',
-        "response_content_truncated": False,
+        "response_headers": {
+            "headers": {
+                "Content-Type": {"text": "application/json", "truncated": False}
+            },
+            "striped": False,
+        },
+        "response_content": {"text": '{"response": "data"}', "truncated": False},
         "saleor_app": {
             "name": "Sample app objects",
             "saleor_app_id": graphene.Node.to_global_id("App", app.pk),
@@ -1005,7 +1011,7 @@ def test_generate_api_call_payload_from_request_with_non_utf8_body(app, rf):
 
     payload = json.loads(generate_api_call_payload(request, response))[0]
 
-    assert payload["request_body"] == ""
+    assert payload["request_body"]["text"] == ""
 
 
 def test_generate_api_call_payload_from_post_request(app, rf):
@@ -1017,7 +1023,7 @@ def test_generate_api_call_payload_from_post_request(app, rf):
 
     payload = json.loads(generate_api_call_payload(request, response))[0]
 
-    assert payload["request_body"] == '{"request": ["data"]}'
+    assert payload["request_body"]["text"] == '{"request": ["data"]}'
 
 
 def test_generate_api_call_not_from_app_payload(rf):
@@ -1047,15 +1053,16 @@ def test_generate_event_delivery_attempt_payload(event_attempt):
         "app_id": graphene.Node.to_global_id("App", app.pk),
         "app_name": "Sample app objects",
         "event_id": graphene.Node.to_global_id("EventDelivery", delivery.pk),
-        "event_payload": '{"payload_key": "payload_value"}',
-        "event_payload_truncated": False,
+        "event_payload": {
+            "text": '{"payload_key": "payload_value"}',
+            "truncated": False,
+        },
         "event_status": EventDeliveryStatus.PENDING,
         "event_type": WebhookEventAsyncType.ANY,
         "id": graphene.Node.to_global_id("EventDeliveryAttempt", event_attempt.pk),
-        "request_headers": None,
-        "response_body": "example_response",
-        "response_body_truncated": False,
-        "response_headers": None,
+        "request_headers": {"headers": {}, "striped": False},
+        "response_body": {"text": "example_response", "truncated": False},
+        "response_headers": {"headers": {}, "striped": False},
         "status": EventDeliveryStatus.PENDING,
         "task_params": {"next_retry": None},
         "webhook_id": graphene.Node.to_global_id("Webhook", webhook.pk),
