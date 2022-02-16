@@ -156,7 +156,6 @@ class OrderMutations(graphene.ObjectType):
     order_cancel = OrderCancel.Field()
     order_capture = OrderCapture.Field()
     order_confirm = OrderConfirm.Field()
-
     order_fulfill = OrderFulfill.Field()
     order_fulfillment_cancel = FulfillmentCancel.Field()
     order_fulfillment_approve = FulfillmentApprove.Field()

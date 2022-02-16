@@ -296,6 +296,9 @@ class CheckoutCreateInput(graphene.InputObjectType):
     channel = graphene.String(
         description="Slug of a channel in which to create a checkout."
     )
+    alternative_channel = graphene.String(
+        description="Slug of a channel in which to create a checkout."
+    )
     lines = graphene.List(
         CheckoutLineInput,
         description=(
@@ -316,7 +319,10 @@ class CheckoutCreateInput(graphene.InputObjectType):
     language_code = graphene.Argument(
         LanguageCodeEnum, required=False, description="Checkout language code."
     )
-
+    is_preoder = graphene.Boolean()
+    requested_shipment_date = graphene.DateTime(
+        description="The date and time when the app was created."
+    )
 
 class CheckoutCreate(ModelMutation, I18nMixin):
     created = graphene.Field(
@@ -395,8 +401,10 @@ class CheckoutCreate(ModelMutation, I18nMixin):
 
     @classmethod
     def clean_input(cls, info, instance: models.Checkout, data, input_cls=None):
+        
         user = info.context.user
         channel = data.pop("channel")
+
         cleaned_input = super().clean_input(info, instance, data)
 
         cleaned_input["channel"] = channel
@@ -449,6 +457,17 @@ class CheckoutCreate(ModelMutation, I18nMixin):
         channel = cleaned_input["channel"]
         variants = cleaned_input.get("variants")
         quantities = cleaned_input.get("quantities")
+        #check quantity
+        for quantity in quantities:
+            if quantity == 0:
+                raise ValidationError(
+                {
+                    "quantity": ValidationError(
+                        "stock is not enough",
+                        code=CheckoutErrorCode.ZERO_QUANTITY,
+                    )
+                }
+            )
         if variants and quantities:
             add_variants_to_checkout(
                 instance,
@@ -491,6 +510,54 @@ class CheckoutCreate(ModelMutation, I18nMixin):
         response.created = True
         return response
 
+
+class PreOrderCheckoutCreate(CheckoutCreate):
+    class Arguments:
+        input = CheckoutCreateInput(
+            required=True, description="Fields required to create checkout."
+        )
+
+    class Meta:
+        description = (
+            "Create a new checkout even if the available stock is not enough."
+        )
+        model = models.Checkout
+        return_field_name = "checkout"
+        error_type_class = CheckoutError
+        error_type_field = "checkout_errors"
+
+    @classmethod
+    def clean_checkout_lines(
+        cls, lines, country, channel
+    ) -> Tuple[List[product_models.ProductVariant], List[int]]:
+        print(11111)
+        variant_ids = [line["variant_id"] for line in lines]
+        variants = cls.get_nodes_or_error(
+            variant_ids,
+            "variant_id",
+            ProductVariant,
+            qs=product_models.ProductVariant.objects.prefetch_related(
+                "product__product_type"
+            ),
+        )
+
+        quantities = [line["quantity"] for line in lines]
+        variant_db_ids = {variant.id for variant in variants}
+        validate_variants_available_for_purchase(variant_db_ids, channel.id)
+        validate_variants_available_in_channel(
+            variant_db_ids, channel.id, CheckoutErrorCode.UNAVAILABLE_VARIANT_IN_CHANNEL
+        )
+
+        # No need to check quantity
+        # check_lines_quantity(variants, quantities, country, channel.slug)
+
+        return variants, quantities
+
+    @classmethod
+    def save(cls, info, instance: models.Checkout, cleaned_input):
+        instance.is_preorder = True
+        instance.requested_shipment_date = cleaned_input['requested_shipment_date']
+        return super().save(info, instance, cleaned_input)
 
 class CheckoutLinesAdd(BaseMutation):
     checkout = graphene.Field(Checkout, description="An updated checkout.")

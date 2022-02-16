@@ -9,6 +9,7 @@ from django.utils.functional import SimpleLazyObject
 from django_countries.fields import Country
 from prices import Money, TaxedMoney
 from promise.promise import Promise
+from saleor.staffevent.models import StaffEvent
 
 from ..checkout.interface import CheckoutTaxedPricesData
 from ..core.models import EventDelivery
@@ -380,6 +381,8 @@ class BasePlugin:
     invoice_request: Callable[
         ["Order", "Invoice", Union[str, NoneType], Any], Optional["Invoice"]
     ]
+
+    staffevent_created: Callable[["StaffEvent", Any], Any]
 
     #  Trigger after invoice is sent.
     invoice_sent: Callable[["Invoice", str, Any], Any]

@@ -20,6 +20,7 @@ from django.http import HttpResponse, HttpResponseNotFound
 from django.utils.module_loading import import_string
 from django_countries.fields import Country
 from prices import Money, TaxedMoney
+from saleor.staffevent.models import StaffEvent
 
 from ..channel.models import Channel
 from ..checkout import base_calculations
@@ -659,6 +660,16 @@ class PluginsManager(PaymentInterface):
             channel_slug=order.channel.slug,
         )
 
+    def staffevent_created (
+        self,
+        staffevent: "StaffEvent"
+    ):
+        default_value = None
+        return self.__run_method_on_plugins(
+            "staffevent_created",
+            default_value,
+            staffevent
+        )
     def invoice_delete(self, invoice: "Invoice"):
         default_value = None
         channel_slug = invoice.order.channel.slug if invoice.order else None

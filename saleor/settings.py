@@ -69,8 +69,17 @@ ALLOWED_CLIENT_HOSTS = get_list(ALLOWED_CLIENT_HOSTS)
 INTERNAL_IPS = get_list(os.environ.get("INTERNAL_IPS", "127.0.0.1"))
 
 DATABASES = {
+    # 'default': {
+    #     'ENGINE': 'django.db.backends.postgresql',
+    #     'NAME': 'saleor',
+    #     'USER': 'saleor',
+    #     'PASSWORD': 'saleor',
+    #     'HOST': '127.0.0.1',
+    #     'PORT': '5432',
+    # }
     "default": dj_database_url.config(
         default="postgres://saleor:saleor@localhost:5432/saleor", conn_max_age=600
+        
     )
 }
 
@@ -210,6 +219,7 @@ INSTALLED_APPS = [
     "saleor.webhook",
     "saleor.wishlist",
     "saleor.app",
+    "saleor.staffevent",
     # External apps
     "versatileimagefield",
     "django_measurement",
@@ -575,6 +585,7 @@ BUILTIN_PLUGINS = [
     "saleor.plugins.user_email.plugin.UserEmailPlugin",
     "saleor.plugins.admin_email.plugin.AdminEmailPlugin",
     "saleor.plugins.sendgrid.plugin.SendgridEmailPlugin",
+    "saleor.plugins.staffevent.plugin.StaffEventPlugin",
 ]
 
 # Plugin discovery

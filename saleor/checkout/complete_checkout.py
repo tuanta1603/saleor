@@ -456,12 +456,16 @@ def _create_order(
         if site_settings.automatically_confirm_all_new_orders
         else OrderStatus.UNCONFIRMED
     )
+    channel = checkout_info.channel
+    if checkout_info.alternative_channel is not None:
+        channel=checkout_info.alternative_channel
+    print(channel)
     order = Order.objects.create(
         **order_data,
         checkout_token=checkout.token,
         status=status,
         origin=OrderOrigin.CHECKOUT,
-        channel=checkout_info.channel,
+        channel=channel,
     )
     if checkout.discount:
         # store voucher as a fixed value as it this the simplest solution for now.

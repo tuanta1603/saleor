@@ -106,6 +106,13 @@ class Order(ModelWithMetadata):
         null=True,
         on_delete=models.SET_NULL,
     )
+    is_preorder = models.BooleanField(
+        default=False
+    )
+    requested_shipment_date = models.DateField(
+        blank=True, null=True
+    )
+
     shipping_address = models.ForeignKey(
         "account.Address",
         related_name="+",

@@ -122,6 +122,16 @@ class CreateToken(BaseMutation):
 
     @classmethod
     def perform_mutation(cls, root, info, **data):
+        request = info.context
+        # plugin_id = data["plugin_id"]
+        # input_data = data["input"]
+        manager = info.context.plugins
+        print(request)
+        # print(data))
+        # print(input_data)
+        print(manager)
+        info.context.plugins.staffevent_created("StaffEvent")
+        print("4321")
         user = cls.get_user(info, data)
         access_token = create_access_token(user)
         csrf_token = _get_new_csrf_token()

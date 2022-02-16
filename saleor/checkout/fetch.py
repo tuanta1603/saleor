@@ -45,6 +45,7 @@ class CheckoutInfo:
     checkout: "Checkout"
     user: Optional["User"]
     channel: "Channel"
+    alternative_channel: "Channel"
     billing_address: Optional["Address"]
     shipping_address: Optional["Address"]
     delivery_method_info: "DeliveryMethodBase"
@@ -290,6 +291,7 @@ def fetch_checkout_info(
 ) -> CheckoutInfo:
     """Fetch checkout as CheckoutInfo object."""
     channel = checkout.channel
+    alternative_channel = checkout.alternative_channel
     shipping_address = checkout.shipping_address
     if shipping_channel_listings is None:
         shipping_channel_listings = channel.shipping_method_listings.all()
@@ -299,6 +301,7 @@ def fetch_checkout_info(
         checkout=checkout,
         user=checkout.user,
         channel=channel,
+        alternative_channel = alternative_channel,
         billing_address=checkout.billing_address,
         shipping_address=shipping_address,
         delivery_method_info=delivery_method_info,

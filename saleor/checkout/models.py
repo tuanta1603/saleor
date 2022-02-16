@@ -53,6 +53,12 @@ class Checkout(ModelWithMetadata):
         related_name="checkouts",
         on_delete=models.PROTECT,
     )
+    alternative_channel = models.ForeignKey(
+        Channel,
+        related_name="alternative_channel",
+        on_delete=models.PROTECT,
+        null=True,
+    )
     billing_address = models.ForeignKey(
         "account.Address",
         related_name="+",
@@ -67,6 +73,13 @@ class Checkout(ModelWithMetadata):
         null=True,
         on_delete=models.SET_NULL,
     )
+    is_preorder = models.BooleanField(
+        default=False
+    )
+    requested_shipment_date = models.DateField(
+        blank=True, null=True
+    )
+
     shipping_method = models.ForeignKey(
         ShippingMethod,
         blank=True,
